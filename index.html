@@ -3,6 +3,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Inventario del Bar</title>
 <meta name="theme-color" content="#b4561b">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 :root{--bg:#f6f4ef;--card:#fff;--tx:#1d1d1b;--mut:#77746b;--ac:#b4561b;--acx:#fff;--ok:#2f7d4f;--bad:#c0392b;--bd:#e4e0d6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161512;--card:#211f1b;--tx:#f1eee6;--mut:#9a958a;--ac:#e08a4b;--acx:#1a1308;--ok:#5fb383;--bad:#ff7a6b;--bd:#35322b}}
@@ -25,7 +27,7 @@ input,select{font:inherit;width:100%;padding:11px;border-radius:10px;border:1px 
 .rb{width:44px;height:44px;padding:0;font-size:22px}
 .alert{background:var(--bad);color:#fff;border-radius:12px;padding:10px 12px;margin:8px 0;font-weight:600}
 .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--bd);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}
-.tabs button{flex:1;background:transparent;color:var(--mut);border-radius:8px}.tabs button.on{color:var(--ac)}
+.tabs button{flex:1;font-size:13px;padding:8px 2px;background:transparent;color:var(--mut);border-radius:8px}.tabs button.on{color:var(--ac)}
 .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px auto;max-width:280px}.pad button{font-size:24px;padding:16px;background:var(--card);color:var(--tx);border:1px solid var(--bd)}
 .dots{display:flex;gap:14px;justify-content:center;margin:18px}.dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--ac)}.dots i.f{background:var(--ac)}
 .sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;z-index:5}
@@ -49,7 +51,7 @@ const st={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k
 const today=()=>new Date().toLocaleDateString('sv');
 const fd=d=>d?d.split('-').reverse().join('/'):'';
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-let db=null,S={users:[],products:[],logs:[],lu:0,lp:0,me:null,tab:'inv',cat:'Todos',q:'',low:false,sheet:null,pin:'',err:'',edit:false,seeding:''};
+let db=null,S={users:[],products:[],logs:[],lu:0,lp:0,me:null,tab:'inv',cat:'Todos',q:'',low:false,sheet:null,pin:'',err:'',edit:false,seeding:'',ord:{}};
 const isAdmin=()=>S.me&&S.me.role==='admin';
 const isLow=p=>(p.min||0)>0&&(p.qty||0)<=p.min;
 function toast(t){const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),2200)}
@@ -86,7 +88,7 @@ function pad(){return `<div class="pad">${[1,2,3,4,5,6,7,8,9].map(n=>`<button on
 function setupView(){return `<div class="center"><h1>Configuración inicial</h1><p class="mut">Crea la cuenta de administrador.</p>
 <label>Tu nombre</label><input id="sn" placeholder="Nombre"><label>PIN de 4 dígitos</label><input id="sp" inputmode="numeric" maxlength="4" placeholder="0000">
 <p><button onclick="setup()" style="width:100%">Crear administrador</button></p></div>`}
-function loginView(){return `<div class="center"><h1>🍺 Inventario</h1><p class="mut">Introduce tu PIN</p>${dots()}${pad()}<p class="mut">${esc(S.msg||'')}</p></div>`}
+function loginView(){return `<div class="center"><h1>🍺 Inventario</h1><p class="mut">Introduce tu PIN</p>${dots()}${pad()}<p class="mut">${esc(S.msg||'')}</p>${installBtn()}</div>`}
 function key(d){if(S.pin.length>=4)return;S.pin+=d;S.msg='';
   if(S.pin.length===4){const u=S.users.find(x=>x.pin===S.pin);S.pin='';if(u){st.set('inv_me',u.id);S.me=u;S.tab='inv'}else S.msg='PIN incorrecto'}
   render()}
@@ -97,25 +99,48 @@ function logout(){st.del('inv_me');S.me=null;S.pin='';render()}
 
 function mainView(){
   const t=S.tab;
-  return `<div class="top"><div><h1>🍺 Inventario</h1><div class="mut">${esc(S.me.name)}${isAdmin()?' · admin':''}</div></div><button class="g" onclick="logout()">Salir</button></div>`+
-  (t==='inv'?invView():t==='log'?logView():usersView())+
-  `<div class="tabs"><button class="${t==='inv'?'on':''}" onclick="S.tab='inv';render()">📦 Stock</button><button class="${t==='log'?'on':''}" onclick="S.tab='log';render()">🕘 Historial</button>${isAdmin()?`<button class="${t==='usr'?'on':''}" onclick="S.tab='usr';render()">👥 Usuarios</button>`:''}</div>`+
+  return `<div class="top"><div><h1>🍺 Inventario</h1><div class="mut">${esc(S.me.name)}${isAdmin()?' · admin':''}</div></div><div class="row" style="gap:6px">${installBtn()}<button class="g" onclick="logout()">Salir</button></div></div>`+
+  (t==='inv'?invView():t==='ped'?pedView():t==='log'?logView():usersView())+
+  `<div class="tabs"><button class="${t==='inv'?'on':''}" onclick="S.tab='inv';render()">📦 Stock</button><button class="${t==='ped'?'on':''}" onclick="S.tab='ped';render()">📝 Pedido</button><button class="${t==='log'?'on':''}" onclick="S.tab='log';render()">🕘 Historial</button>${isAdmin()?`<button class="${t==='usr'?'on':''}" onclick="S.tab='usr';render()">👥 Usuarios</button>`:''}</div>`+
   (S.sheet?sheetView():'');
 }
-function invView(){
-  const low=S.products.filter(isLow);
-  let list=S.products.filter(p=>(S.cat==='Todos'||p.cat===S.cat)&&(!S.low||isLow(p))&&p.name.toLowerCase().includes(S.q.toLowerCase()));
+const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+function listHtml(){
+  const list=S.products.filter(p=>(S.cat==='Todos'||p.cat===S.cat)&&(!S.low||isLow(p))&&norm(p.name).includes(norm(S.q.trim())));
   list.sort((a,b)=>a.name.localeCompare(b.name,'es'));
-  let h='';
-  if(!S.products.length)h+=`<div class="card center"><p>El inventario está vacío.</p>${isAdmin()?`<button onclick="seed()">Cargar inventario inicial (${Object.values(SEED).flat().length} productos)</button><p class="mut">${esc(S.seeding)}</p>`:'<p class="mut">Pide al administrador que cargue los productos.</p>'}</div>`;
-  if(low.length)h+=`<div class="alert" onclick="S.low=!S.low;render()">⚠️ ${low.length} producto${low.length>1?'s':''} con stock bajo ${S.low?'(mostrando solo esos · toca para ver todo)':'· toca para filtrar'}</div>`;
-  h+=`<input id="q" placeholder="Buscar producto…" value="${esc(S.q)}" oninput="S.q=this.value;render()">`;
-  h+=`<div class="chips">${['Todos',...CATS].map(c=>`<button class="${S.cat===c?'':'g'}" onclick="S.cat='${c}';render()">${c}</button>`).join('')}</div>`;
-  if(isAdmin())h+=`<button class="g" style="width:100%;margin-bottom:8px" onclick="openSheet('new')">＋ Nuevo producto</button>`;
-  h+=list.map(p=>`<div class="card row ${isLow(p)?'low':''}"><div class="grow" onclick="openSheet('${p.id}')"><b>${esc(p.name)}</b><div class="mut">${esc(p.cat)}${p.min?` · mín. ${p.min}`:''}${p.lastEntry?` · pedido ${fd(p.lastEntry.date)}`:''}</div></div><button class="rb g" onclick="move('${p.id}',-1,'salida')">−</button><div class="qty">${p.qty||0}</div><button class="rb" onclick="openSheet('${p.id}','entrada')">+</button></div>`).join('');
+  let h=list.map(p=>`<div class="card row ${isLow(p)?'low':''}"><div class="grow" onclick="openSheet('${p.id}')"><b>${esc(p.name)}</b><div class="mut">${esc(p.cat)}${p.min?` · mín. ${p.min}`:''}${p.lastEntry?` · pedido ${fd(p.lastEntry.date)}`:''}</div></div><button class="rb g" onclick="move('${p.id}',-1,'salida')">−</button><div class="qty">${p.qty||0}</div><button class="rb" onclick="openSheet('${p.id}','entrada')">+</button></div>`).join('');
   if(S.products.length&&!list.length)h+=`<p class="mut center">Sin resultados</p>`;
   return h;
 }
+function invView(){
+  const low=S.products.filter(isLow);
+  let h='';
+  if(!S.products.length)h+=`<div class="card center"><p>El inventario está vacío.</p>${isAdmin()?`<button onclick="seed()">Cargar inventario inicial (${Object.values(SEED).flat().length} productos)</button><p class="mut">${esc(S.seeding)}</p>`:'<p class="mut">Pide al administrador que cargue los productos.</p>'}</div>`;
+  if(low.length)h+=`<div class="alert" onclick="S.low=!S.low;render()">⚠️ ${low.length} producto${low.length>1?'s':''} con stock bajo ${S.low?'(mostrando solo esos · toca para ver todo)':'· toca para filtrar'}</div>`;
+  h+=`<input id="q" type="search" autocomplete="off" placeholder="Buscar producto…" value="${esc(S.q)}" oninput="S.q=this.value;$('#plist').innerHTML=listHtml()">`;
+  h+=`<div class="chips">${['Todos',...CATS].map(c=>`<button class="${S.cat===c?'':'g'}" onclick="S.cat='${c}';render()">${c}</button>`).join('')}</div>`;
+  if(isAdmin())h+=`<button class="g" style="width:100%;margin-bottom:8px" onclick="openSheet('new')">＋ Nuevo producto</button>`;
+  return h+`<div id="plist">${listHtml()}</div>`;
+}
+const lowList=()=>S.products.filter(p=>(p.qty||0)===0||isLow(p)).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+function orderText(){const l=lowList();const L=['LISTA DE PEDIDO - '+new Date().toLocaleDateString('es-ES'),'Preparada por: '+S.me.name,''];
+  CATS.forEach(c=>{const g=l.filter(p=>p.cat===c);if(!g.length)return;L.push(c.toUpperCase());
+    g.forEach(p=>{const o=parseInt(S.ord[p.id]);L.push('[ ] '+p.name+' - quedan '+(p.qty||0)+(p.min?' (mín. '+p.min+')':'')+' -> PEDIR: '+(o>0?o:'____'))});L.push('')});
+  return L.join('\n')}
+function pedView(){const l=lowList();
+  if(!l.length)return `<p class="center">✅ No hay productos agotados ni con stock bajo.</p>`;
+  let h=`<h2>Productos a pedir (${l.length})</h2><p class="mut">Agotados o por debajo del mínimo. Opcional: escribe cuánto pedir.</p>`;
+  CATS.forEach(c=>{const g=l.filter(p=>p.cat===c);if(!g.length)return;
+    h+=`<h2 class="mut">${c}</h2>`+g.map(p=>`<div class="card row ${(p.qty||0)===0?'low':''}"><div class="grow"><b>${esc(p.name)}</b><div class="mut">Quedan ${p.qty||0}${p.min?` · mín. ${p.min}`:''}</div></div><input id="o_${p.id}" type="number" min="0" placeholder="Pedir" style="width:84px" value="${esc(S.ord[p.id]??'')}" oninput="S.ord[this.id.slice(2)]=this.value"></div>`).join('')});
+  return h+`<div class="row" style="gap:8px;margin-top:10px"><button class="grow" onclick="shareOrder()">📤 Compartir</button><button class="g grow" onclick="copyOrder()">📋 Copiar</button><button class="g grow" onclick="dlOrder()">💾 Descargar</button></div>`}
+async function copyOrder(){const t=orderText();try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}toast('Lista copiada')}
+async function shareOrder(){const t=orderText();if(navigator.share){try{await navigator.share({title:'Lista de pedido',text:t})}catch(e){}}else copyOrder()}
+function dlOrder(){const b=new Blob([orderText()],{type:'text/plain;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='lista-pedido-'+today()+'.txt';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent),standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.dp=e;render()});
+function installBtn(){return standalone?'':(window.dp||isIOS)?`<button class="g" onclick="installApp()">⬇️ Instalar</button>`:''}
+async function installApp(){if(window.dp){window.dp.prompt();await window.dp.userChoice;window.dp=null;render()}else alert('En iPhone: toca el botón Compartir y elige "Añadir a pantalla de inicio".')}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 function logView(){return S.logs.length?S.logs.map(l=>`<div class="card"><b>${esc(l.product)}</b> <span style="color:var(--${l.delta<0?'bad':'ok'})">${l.delta>0?'+':''}${l.delta}</span> <span class="mut">→ ${l.after}</span><div class="mut">${esc(l.user)} · ${new Date(l.ts).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}${l.type==='entrada'&&l.date?' · pedido del '+fd(l.date):''}</div></div>`).join(''):'<p class="mut center">Aún no hay movimientos</p>'}
 function usersView(){return `<h2>Usuarios</h2>`+S.users.map(u=>`<div class="card row"><div class="grow"><b>${esc(u.name)}</b><div class="mut">${u.role==='admin'?'Administrador':'Empleado'} · PIN ${esc(u.pin)}</div></div>${u.id!==S.me.id?`<button class="g" onclick="delUser('${u.id}')">Borrar</button>`:'<span class="mut">tú</span>'}</div>`).join('')+
 `<h2>Añadir usuario</h2><label>Nombre</label><input id="un" placeholder="Ej: Ernesto"><label>PIN de 4 dígitos (único)</label><input id="up" inputmode="numeric" maxlength="4"><label>Rol</label><select id="ur"><option value="staff">Empleado</option><option value="admin">Administrador</option></select><p><button style="width:100%" onclick="addUser()">Crear usuario</button></p>`}
